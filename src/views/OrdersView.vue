@@ -48,6 +48,39 @@ function emojiFor(cakeId: string): string {
   return cakes.value.find((cake) => cake.id === cakeId)?.emoji ?? '🎂'
 }
 
+function showReceipt(popup: Window, url: string): void {
+  const src = url.replace(/"/g, '%22')
+  popup.document.open()
+  popup.document.write(
+    `<!doctype html><title>收据</title><body style="margin:0;background:#fff"><img alt="" src="${src}" style="width:100%;height:auto"></body>`,
+  )
+  popup.document.close()
+}
+
+async function openReceipt(order: Order): Promise<void> {
+  if (!order.receiptPath) return
+  error.value = ''
+  // Open during the click. A signed URL arrives after await, and phones block that popup.
+  const popup = window.open('', '_blank')
+  try {
+    const url = await getApi().receiptUrl(order.receiptPath)
+    if (popup) {
+      try {
+        popup.opener = null
+      } catch {
+        /* The opened tab can keep its opener. */
+      }
+      showReceipt(popup, url)
+      return
+    }
+    window.location.assign(url)
+  } catch (err) {
+    console.error(err)
+    popup?.close()
+    error.value = '没有打开'
+  }
+}
+
 async function setStatus(id: string, status: OrderStatus): Promise<void> {
   if (busyId.value) return
   const previous = orders.value
@@ -88,6 +121,7 @@ async function setStatus(id: string, status: OrderStatus): Promise<void> {
         <div class="sub">{{ summary(order) }}</div>
         <div class="sub">{{ order.phone }}</div>
         <div class="orderno">订单 #{{ order.orderNo }}</div>
+        <button v-if="order.receiptPath" class="receipt" type="button" @click="openReceipt(order)">收据</button>
         <div v-if="order.status === '待确认' || order.status === '已确认'" class="acts">
           <template v-if="order.status === '待确认'">
             <button type="button" :disabled="busyId === order.id" @click="setStatus(order.id, '已确认')">确认</button>

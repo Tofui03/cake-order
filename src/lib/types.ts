@@ -7,6 +7,7 @@ export type Fulfillment = (typeof FULFILLMENTS)[number]
 export interface Settings {
   shopName: string
   whatsapp: string
+  duitnowQrUrl: string | null
 }
 
 export interface Cake {
@@ -38,6 +39,7 @@ export interface Order {
   total: number
   status: OrderStatus
   createdAt: string
+  receiptPath: string | null
 }
 
 export interface NewOrder {
@@ -48,6 +50,7 @@ export interface NewOrder {
   fulfillment: Fulfillment
   items: OrderItem[]
   total: number
+  receiptPath: string | null
 }
 
 export interface ShopApi {
@@ -58,6 +61,9 @@ export interface ShopApi {
   saveCake(cake: Cake): Promise<void>
   deleteCake(id: string): Promise<void>
   uploadCakePhoto(cakeId: string, file: File): Promise<string>
+  uploadDuitNowQr(file: File): Promise<string>
+  uploadReceipt(orderNo: string, file: File): Promise<string>
+  receiptUrl(path: string): Promise<string>
   fetchOrders(): Promise<Order[]>
   createOrder(order: NewOrder): Promise<void>
   setOrderStatus(id: string, status: OrderStatus): Promise<void>

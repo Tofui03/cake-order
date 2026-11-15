@@ -5,6 +5,7 @@ import type { Cake, Order, OrderItem, Settings } from './types'
 export const DEFAULT_SETTINGS: Settings = {
   shopName: '妈妈的蛋糕',
   whatsapp: '60123456789',
+  duitnowQrUrl: null,
 }
 
 export const CAKE_IDS = {
@@ -54,6 +55,7 @@ export function seedOrders(now = new Date()): Order[] {
       total: lineTotal(mei),
       status: '已确认',
       createdAt: created,
+      receiptPath: null,
     },
     {
       id: 'b2222222-2222-4222-8222-222222222222',
@@ -66,6 +68,7 @@ export function seedOrders(now = new Date()): Order[] {
       total: lineTotal(ahmad),
       status: '待确认',
       createdAt: created,
+      receiptPath: null,
     },
     {
       id: 'b3333333-3333-4333-8333-333333333333',
@@ -78,6 +81,7 @@ export function seedOrders(now = new Date()): Order[] {
       total: lineTotal(siew),
       status: '已确认',
       createdAt: created,
+      receiptPath: null,
     },
   ]
 }

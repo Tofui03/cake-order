@@ -56,6 +56,21 @@ describe('buildWhatsAppMessage', () => {
     expect(message).toContain('方式：送货')
     expect(message).toContain('订单 #SY16')
     expect(message).not.toContain('订单 ##')
+    expect(message).not.toContain('已付款，收据已上传')
+  })
+
+  it('adds a paid line after the receipt is stored', () => {
+    const message = buildWhatsAppMessage({
+      items: [{ name: '巧克力蛋糕 6寸', qty: 1 }],
+      total: 68,
+      customerName: 'Mei Ling',
+      phone: '012-3456789',
+      pickupDate: '2026-11-16',
+      fulfillment: '自取',
+      orderNo: 'A1B2',
+      paid: true,
+    })
+    expect(message.endsWith('订单 #A1B2\n已付款，收据已上传')).toBe(true)
   })
 })
 

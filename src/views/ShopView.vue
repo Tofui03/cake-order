@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref } from 'vue'
 import CakePic from '../components/CakePic.vue'
 import { getApi } from '../lib/api'
-import { isOnOrAfter, tomorrowIso } from '../lib/dates'
+import { canPlaceOrder } from '../lib/canSubmit'
+import { tomorrowIso } from '../lib/dates'
 import { formatRm, lineTotal } from '../lib/money'
 import { makeOrderNo } from '../lib/orderNo'
+import { receiptProblem } from '../lib/photos'
 import type { Fulfillment, OrderItem } from '../lib/types'
-import { buildWhatsAppMessage, normalizeWhatsApp, whatsAppUrl } from '../lib/whatsapp'
+import { buildWhatsAppMessage, whatsAppUrl } from '../lib/whatsapp'
 import { useCatalog } from '../state/catalog'
 
 const { cakes, settings, ready, catalogError, load } = useCatalog()
@@ -18,6 +20,10 @@ const date = ref('')
 const way = ref<Fulfillment>('自取')
 const submitting = ref(false)
 const submitError = ref('')
+const receiptFile = ref<File | null>(null)
+const receiptPreview = ref<string | null>(null)
+
+const needsReceipt = computed(() => Boolean(settings.value.duitnowQrUrl?.trim()))
 
 const total = computed(() =>
   lineTotal(cakes.value.map((cake) => ({ price: cake.price, qty: qty[cake.id] ?? 0 }))),
@@ -27,18 +33,20 @@ const buttonLabel = computed(() =>
   total.value > 0 ? `用 WhatsApp 下单 · RM ${formatRm(total.value)}` : '用 WhatsApp 下单',
 )
 
-const canSubmit = computed(() => {
-  return (
-    ready.value &&
-    !submitting.value &&
-    total.value > 0 &&
-    name.value.trim().length > 0 &&
-    phone.value.trim().length > 0 &&
-    isOnOrAfter(date.value, tomorrowIso()) &&
-    (way.value === '自取' || way.value === '送货') &&
-    normalizeWhatsApp(settings.value.whatsapp).length >= 8
-  )
-})
+const canSubmit = computed(() =>
+  canPlaceOrder({
+    ready: ready.value,
+    submitting: submitting.value,
+    total: total.value,
+    name: name.value,
+    phone: phone.value,
+    pickupDate: date.value,
+    fulfillment: way.value,
+    whatsapp: settings.value.whatsapp,
+    paymentRequired: needsReceipt.value,
+    hasReceipt: receiptFile.value !== null,
+  }),
+)
 
 function changeQty(id: string, delta: number): void {
   const next = Math.max(0, (qty[id] ?? 0) + delta)
@@ -47,13 +55,39 @@ function changeQty(id: string, delta: number): void {
   submitError.value = ''
 }
 
+function setReceipt(file: File | null): void {
+  if (receiptPreview.value) URL.revokeObjectURL(receiptPreview.value)
+  receiptFile.value = file
+  receiptPreview.value = file ? URL.createObjectURL(file) : null
+}
+
+function onReceipt(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  submitError.value = ''
+  if (!file) return
+  const issue = receiptProblem(file)
+  if (issue) {
+    setReceipt(null)
+    submitError.value = issue
+    return
+  }
+  setReceipt(file)
+}
+
 function reset(): void {
   name.value = ''
   phone.value = ''
   date.value = ''
   way.value = '自取'
+  setReceipt(null)
   for (const key of Object.keys(qty)) delete qty[key]
 }
+
+onUnmounted(() => {
+  if (receiptPreview.value) URL.revokeObjectURL(receiptPreview.value)
+})
 
 function openWhatsApp(url: string, popup: Window | null): void {
   if (popup) {
@@ -88,6 +122,8 @@ async function submit(): Promise<void> {
     const customerPhone = phone.value.trim()
     const pickupDate = date.value
     const fulfillment = way.value
+    const file = receiptFile.value
+    const receiptPath = needsReceipt.value && file ? await getApi().uploadReceipt(orderNo, file) : null
     await getApi().createOrder({
       orderNo,
       customerName,
@@ -96,6 +132,7 @@ async function submit(): Promise<void> {
       fulfillment,
       items,
       total: orderTotal,
+      receiptPath,
     })
     const message = buildWhatsAppMessage({
       items,
@@ -105,6 +142,7 @@ async function submit(): Promise<void> {
       pickupDate,
       fulfillment,
       orderNo,
+      paid: Boolean(receiptPath),
     })
     openWhatsApp(whatsAppUrl(settings.value.whatsapp, message), popup)
     reset()
@@ -173,6 +211,15 @@ async function submit(): Promise<void> {
             <button type="button" :class="{ on: way === '自取' }" @click="way = '自取'">自取</button>
             <button type="button" :class="{ on: way === '送货' }" @click="way = '送货'">送货</button>
           </div>
+        </div>
+        <div v-if="needsReceipt" class="pay">
+          <img class="qr" :src="settings.duitnowQrUrl ?? ''" alt="" />
+          <p class="pay-line">请先转账 RM {{ formatRm(total) }}</p>
+          <label class="file">
+            收据
+            <input type="file" accept="image/*" @change="onReceipt" />
+          </label>
+          <img v-if="receiptPreview" class="thumb" :src="receiptPreview" alt="" />
         </div>
       </template>
     </main>

@@ -1,4 +1,4 @@
-import { photoProblem } from './photos'
+import { photoProblem, receiptProblem } from './photos'
 import { DEFAULT_SETTINGS, SEED_CAKES, seedOrders } from './seed'
 import type { Cake, NewOrder, Order, OrderStatus, Settings, ShopApi } from './types'
 
@@ -37,9 +37,13 @@ function read(): DemoState {
       throw new Error('bad demo state')
     }
     return {
-      settings: parsed.settings,
+      settings: {
+        shopName: parsed.settings.shopName,
+        whatsapp: parsed.settings.whatsapp,
+        duitnowQrUrl: parsed.settings.duitnowQrUrl ?? null,
+      },
       cakes: parsed.cakes,
-      orders: parsed.orders,
+      orders: parsed.orders.map((order) => ({ ...order, receiptPath: order.receiptPath ?? null })),
       email: parsed.email ?? null,
     }
   } catch {
@@ -100,6 +104,19 @@ export function createDemoApi(): ShopApi {
       if (problem) throw new Error(problem)
       return readAsDataUrl(file)
     },
+    async uploadDuitNowQr(file) {
+      const problem = photoProblem(file)
+      if (problem) throw new Error(problem)
+      return readAsDataUrl(file)
+    },
+    async uploadReceipt(_orderNo, file) {
+      const problem = receiptProblem(file)
+      if (problem) throw new Error(problem)
+      return readAsDataUrl(file)
+    },
+    async receiptUrl(path) {
+      return path
+    },
     async fetchOrders() {
       return clone(read().orders)
     },
@@ -116,6 +133,7 @@ export function createDemoApi(): ShopApi {
         total: order.total,
         status: '待确认',
         createdAt: new Date().toISOString(),
+        receiptPath: order.receiptPath,
       }
       state.orders.push(stored)
       write(state)

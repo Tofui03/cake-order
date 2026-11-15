@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { photoExtension, photoProblem } from './photos'
+import { photoExtension, photoProblem, receiptObjectName, receiptProblem } from './photos'
 import type { Cake, Fulfillment, NewOrder, Order, OrderItem, OrderStatus, Settings, ShopApi } from './types'
 
 interface CakeRow {
@@ -24,6 +24,7 @@ interface OrderRow {
   total: number | string
   status: OrderStatus
   created_at: string
+  receipt_path: string | null
 }
 
 function asNumber(value: number | string): number {
@@ -56,6 +57,7 @@ function mapOrder(row: OrderRow): Order {
     total: asNumber(row.total),
     status: row.status,
     createdAt: row.created_at,
+    receiptPath: row.receipt_path,
   }
 }
 
@@ -77,17 +79,21 @@ export function createSupabaseApi(url: string, key: string): ShopApi {
     async fetchSettings() {
       const { data, error } = await supabase
         .from('settings')
-        .select('shop_name, whatsapp')
+        .select('shop_name, whatsapp, duitnow_qr_url')
         .eq('id', 1)
         .single()
       raise(error)
-      const row = data as { shop_name: string; whatsapp: string }
-      return { shopName: row.shop_name, whatsapp: row.whatsapp }
+      const row = data as { shop_name: string; whatsapp: string; duitnow_qr_url: string | null }
+      return { shopName: row.shop_name, whatsapp: row.whatsapp, duitnowQrUrl: row.duitnow_qr_url }
     },
     async saveSettings(settings: Settings) {
       const { error } = await supabase
         .from('settings')
-        .update({ shop_name: settings.shopName, whatsapp: settings.whatsapp })
+        .update({
+          shop_name: settings.shopName,
+          whatsapp: settings.whatsapp,
+          duitnow_qr_url: settings.duitnowQrUrl,
+        })
         .eq('id', 1)
       raise(error)
     },
@@ -128,6 +134,36 @@ export function createSupabaseApi(url: string, key: string): ShopApi {
       const { data } = supabase.storage.from('cake-photos').getPublicUrl(path)
       return data.publicUrl
     },
+    async uploadDuitNowQr(file) {
+      const problem = photoProblem(file)
+      if (problem) throw new Error(problem)
+      const ext = photoExtension(file) ?? 'jpg'
+      const path = `duitnow/${Date.now()}.${ext}`
+      const { error } = await supabase.storage.from('cake-photos').upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      })
+      raise(error)
+      const { data } = supabase.storage.from('cake-photos').getPublicUrl(path)
+      return data.publicUrl
+    },
+    async uploadReceipt(orderNo, file) {
+      const problem = receiptProblem(file)
+      if (problem) throw new Error(problem)
+      const path = receiptObjectName(orderNo, file)
+      const { error } = await supabase.storage.from('receipts').upload(path, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: false,
+      })
+      raise(error)
+      return path
+    },
+    async receiptUrl(path) {
+      const { data, error } = await supabase.storage.from('receipts').createSignedUrl(path, 120)
+      raise(error)
+      if (!data?.signedUrl) throw new Error('signed url')
+      return data.signedUrl
+    },
     async fetchOrders() {
       const { data, error } = await supabase.from('orders').select('*').order('pickup_date')
       raise(error)
@@ -145,6 +181,7 @@ export function createSupabaseApi(url: string, key: string): ShopApi {
         items: order.items,
         total: order.total,
         status: '待确认',
+        receipt_path: order.receiptPath,
       })
       raise(error)
     },

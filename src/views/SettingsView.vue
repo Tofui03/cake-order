@@ -131,6 +131,7 @@ async function saveShop(): Promise<void> {
   const next = {
     shopName: shopName.value.trim(),
     whatsapp: normalizeWhatsApp(whatsapp.value),
+    duitnowQrUrl: settings.value.duitnowQrUrl,
   }
   try {
     await getApi().saveSettings(next)
@@ -207,6 +208,30 @@ async function remove(cake: Cake): Promise<void> {
   }
 }
 
+async function onQr(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const issue = photoProblem(file)
+  if (issue) {
+    problem.value = issue
+    return
+  }
+  problem.value = ''
+  try {
+    const url = await getApi().uploadDuitNowQr(file)
+    const next = { ...settings.value, duitnowQrUrl: url }
+    await getApi().saveSettings(next)
+    settings.value = next
+  } catch (error) {
+    console.error(error)
+    problem.value = error instanceof Error && (error.message === '照片太大' || error.message === '请选图片')
+      ? error.message
+      : '没有保存'
+  }
+}
+
 async function logout(): Promise<void> {
   try {
     await getApi().signOut()
@@ -226,6 +251,13 @@ async function logout(): Promise<void> {
       <input id="shop-whatsapp" v-model="whatsapp" maxlength="20" inputmode="tel" autocomplete="tel" />
     </div>
     <button class="btn shop-save" type="button" :disabled="!canSaveShop || savingShop" @click="saveShop">保存</button>
+
+    <h2 class="section">DuitNow QR</h2>
+    <img v-if="settings.duitnowQrUrl" class="qr" :src="settings.duitnowQrUrl" alt="" />
+    <label class="file">
+      {{ settings.duitnowQrUrl ? '更换' : '上传' }}
+      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" @change="onQr" />
+    </label>
 
     <h2 class="section">蛋糕</h2>
     <p v-if="problem" class="error">{{ problem }}</p>
