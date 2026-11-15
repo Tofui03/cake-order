@@ -50,7 +50,7 @@ button, a { touch-action: manipulation; }
 
 header {
   flex: none;
-  padding: max(18px, env(safe-area-inset-top)) 20px 2px;
+  padding: max(18px, env(safe-area-inset-top)) 20px 8px;
 }
 
 h1 {
