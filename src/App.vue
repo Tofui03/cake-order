@@ -20,10 +20,6 @@ watch(
     <header>
       <h1>{{ settings.shopName }}</h1>
     </header>
-    <nav class="seg" aria-label="页面">
-      <router-link to="/" exact-active-class="on">点单</router-link>
-      <router-link to="/admin" active-class="on">后台</router-link>
-    </nav>
     <div class="stage">
       <router-view />
     </div>
