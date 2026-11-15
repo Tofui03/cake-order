@@ -11,6 +11,8 @@ export interface WhatsAppMessageInput {
   fulfillment: Fulfillment
   /** Short code without a hash, e.g. A1B2. */
   orderNo: string
+  /** True after the receipt has been stored. */
+  paid?: boolean
 }
 
 export function normalizeWhatsApp(input: string): string {
@@ -23,7 +25,7 @@ export function buildWhatsAppMessage(input: WhatsAppMessageInput): string {
     .map((item) => `${item.name} x${item.qty}`)
     .join('\n')
   const orderNo = input.orderNo.replace(/^#/, '')
-  return [
+  const message = [
     '你好，我要订蛋糕：',
     lines,
     `合计 RM ${formatRm(input.total)}`,
@@ -33,7 +35,9 @@ export function buildWhatsAppMessage(input: WhatsAppMessageInput): string {
     `日期：${formatPickupDate(input.pickupDate)}`,
     `方式：${input.fulfillment}`,
     `订单 #${orderNo}`,
-  ].join('\n')
+  ]
+  if (input.paid) message.push('已付款，收据已上传')
+  return message.join('\n')
 }
 
 export function whatsAppUrl(phone: string, message: string): string {

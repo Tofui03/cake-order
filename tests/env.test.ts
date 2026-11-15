@@ -46,3 +46,21 @@ describe('migration', () => {
     expect(sql).not.toContain('sb_secret_')
   })
 })
+
+describe('duitnow migration', () => {
+  const sql = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../supabase/migrations/20261115030000_duitnow_receipts.sql'),
+    'utf8',
+  )
+
+  it('keeps receipts private and requires one when a QR is published', () => {
+    expect(sql).toContain('duitnow_qr_url')
+    expect(sql).toContain('receipt_path')
+    expect(sql).toContain("'receipts'")
+    expect(sql).toContain('public = false')
+    expect(sql).toContain('to anon')
+    expect(sql).toContain('to authenticated')
+    expect(sql).not.toMatch(/for select[\s\S]{0,40}to anon/)
+    expect(sql).not.toContain('sb_secret_')
+  })
+})
