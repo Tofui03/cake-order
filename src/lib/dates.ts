@@ -1,4 +1,5 @@
-const WEEKDAYS = '日一二三四五六'
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export function todayIso(now = new Date()): string {
   const year = now.getFullYear()
@@ -19,6 +20,22 @@ export function tomorrowIso(now = new Date()): string {
   return addDays(todayIso(now), 1)
 }
 
+export function quickPickupOptions(now = new Date()): { label: string; iso: string }[] {
+  const tomorrow = tomorrowIso(now)
+  const dayAfter = addDays(todayIso(now), 2)
+  const day = now.getDay()
+  const daysToSat = (6 - day + 7) % 7 || 7
+  const sat = addDays(todayIso(now), daysToSat)
+  const options = [
+    { label: 'Tomorrow', iso: tomorrow },
+    { label: 'In 2 days', iso: dayAfter },
+  ]
+  if (sat !== tomorrow && sat !== dayAfter) {
+    options.push({ label: daysToSat <= 7 - day ? 'This Sat' : 'Next Sat', iso: sat })
+  }
+  return options
+}
+
 export function isOnOrAfter(isoDate: string, minIso: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(isoDate) && isoDate >= minIso
 }
@@ -34,5 +51,5 @@ export function formatPickupDate(isoDate: string): string {
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
     throw new Error(`Invalid date: ${isoDate}`)
   }
-  return `${month}月${day}日 周${WEEKDAYS[date.getDay()]}`
+  return `${WEEKDAYS[date.getDay()]}, ${day} ${MONTHS[month - 1]}`
 }

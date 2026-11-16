@@ -106,16 +106,16 @@ grant select, insert, update, delete on table public.cakes to authenticated;
 grant select, insert, update, delete on table public.orders to authenticated;
 
 insert into public.settings (id, shop_name, whatsapp)
-values (1, '妈妈的蛋糕', '60123456789')
+values (1, 'Mum''s Cakes', '60123456789')
 on conflict (id) do nothing;
 
 insert into public.cakes (id, name, price, photo_url, emoji, color, active, sort_order)
 values
-  ('a1111111-1111-4111-8111-111111111111', '巧克力蛋糕 6寸', 68, null, '🍫', '#f0e0d4', true, 1),
-  ('a2222222-2222-4222-8222-222222222222', '芝士蛋糕 6寸', 75, null, '🧀', '#fbf0cf', true, 2),
-  ('a3333333-3333-4333-8333-333333333333', '班兰戚风', 45, null, '🌿', '#e2f1dc', true, 3),
-  ('a4444444-4444-4444-8444-444444444444', '草莓鲜奶油 8寸', 98, null, '🍓', '#fbe1e4', true, 4),
-  ('a5555555-5555-4555-8555-555555555555', '杯子蛋糕（6个）', 30, null, '🧁', '#ece3f6', true, 5)
+  ('a1111111-1111-4111-8111-111111111111', 'Chocolate Cake 6"', 68, null, '🍫', '#f0e0d4', true, 1),
+  ('a2222222-2222-4222-8222-222222222222', 'Cheesecake 6"', 75, null, '🧀', '#fbf0cf', true, 2),
+  ('a3333333-3333-4333-8333-333333333333', 'Pandan Chiffon', 45, null, '🌿', '#e2f1dc', true, 3),
+  ('a4444444-4444-4444-8444-444444444444', 'Strawberry Cream 8"', 98, null, '🍓', '#fbe1e4', true, 4),
+  ('a5555555-5555-4555-8555-555555555555', 'Cupcakes (6 pcs)', 30, null, '🧁', '#ece3f6', true, 5)
 on conflict (id) do nothing;
 
 -- 公开桶：知道链接就能看照片。不给匿名 list 权限，避免被人翻目录。

@@ -2,8 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { dailyBakeCounts, ordersByDate, sortCounts } from '../lib/aggregate'
 import { getApi } from '../lib/api'
-import { formatPickupDate } from '../lib/dates'
+import { formatPickupDate, todayIso } from '../lib/dates'
+import { formatRm } from '../lib/money'
 import type { Order, OrderStatus } from '../lib/types'
+import { normalizeWhatsApp } from '../lib/whatsapp'
 import { useCatalog } from '../state/catalog'
 
 const { cakes, load } = useCatalog()
@@ -11,6 +13,8 @@ const orders = ref<Order[]>([])
 const loaded = ref(false)
 const error = ref('')
 const busyId = ref<string | null>(null)
+const showPast = ref(false)
+const receiptModal = ref<{ order: Order; url: string } | null>(null)
 
 onMounted(async () => {
   try {
@@ -19,7 +23,7 @@ onMounted(async () => {
     loaded.value = true
   } catch (err) {
     console.error(err)
-    error.value = '加载失败'
+    error.value = 'Failed to load'
   }
 })
 
@@ -30,12 +34,29 @@ const days = computed(() => {
     date: group.date,
     label: formatPickupDate(group.date),
     orders: group.orders,
+    pendingCount: group.orders.filter((o) => o.status === '待确认').length,
+    hasOpen: group.orders.some((o) => o.status === '待确认' || o.status === '已确认'),
     counts: sortCounts(bakes.get(group.date) ?? [], cakes.value),
   }))
 })
 
+const today = computed(() => todayIso())
+const activeDays = computed(() => days.value.filter((d) => d.date >= today.value || d.hasOpen))
+const pastDays = computed(() => days.value.filter((d) => d.date < today.value && !d.hasOpen))
+
 function summary(order: Order): string {
-  return order.items.map((item) => `${item.name} x${item.qty}`).join('，')
+  return order.items.map((item) => `${item.name} x${item.qty}`).join(', ')
+}
+
+function fulfillmentLabel(fulfillment: Order['fulfillment']): string {
+  return fulfillment === '送货' ? 'Delivery' : 'Pickup'
+}
+
+function statusLabel(status: OrderStatus): string {
+  if (status === '已确认') return 'Confirmed'
+  if (status === '已完成') return 'Completed'
+  if (status === '取消') return 'Cancelled'
+  return 'Pending'
 }
 
 function chipClass(status: OrderStatus): string {
@@ -48,41 +69,27 @@ function emojiFor(cakeId: string): string {
   return cakes.value.find((cake) => cake.id === cakeId)?.emoji ?? '🎂'
 }
 
-function showReceipt(popup: Window, url: string): void {
-  const src = url.replace(/"/g, '%22')
-  popup.document.open()
-  popup.document.write(
-    `<!doctype html><title>收据</title><body style="margin:0;background:#fff"><img alt="" src="${src}" style="width:100%;height:auto"></body>`,
-  )
-  popup.document.close()
-}
-
 async function openReceipt(order: Order): Promise<void> {
   if (!order.receiptPath) return
   error.value = ''
-  // Open during the click. A signed URL arrives after await, and phones block that popup.
-  const popup = window.open('', '_blank')
   try {
     const url = await getApi().receiptUrl(order.receiptPath)
-    if (popup) {
-      try {
-        popup.opener = null
-      } catch {
-        /* The opened tab can keep its opener. */
-      }
-      showReceipt(popup, url)
-      return
-    }
-    window.location.assign(url)
+    receiptModal.value = { order, url }
   } catch (err) {
     console.error(err)
-    popup?.close()
-    error.value = '没有打开'
+    error.value = 'Could not open receipt'
   }
+}
+
+function phoneHref(phone: string): string {
+  const digits = normalizeWhatsApp(phone)
+  return digits.length >= 8 ? `https://wa.me/${digits}` : `tel:${phone}`
 }
 
 async function setStatus(id: string, status: OrderStatus): Promise<void> {
   if (busyId.value) return
+  if (status === '取消' && !window.confirm('Cancel this order? It will no longer be shown.')) return
+  if (status === '已完成' && !window.confirm('Mark this order as delivered/completed?')) return
   const previous = orders.value
   busyId.value = id
   error.value = ''
@@ -92,7 +99,7 @@ async function setStatus(id: string, status: OrderStatus): Promise<void> {
   } catch (err) {
     console.error(err)
     orders.value = previous
-    error.value = '没有保存'
+    error.value = 'Failed to save'
   } finally {
     busyId.value = null
   }
@@ -101,31 +108,37 @@ async function setStatus(id: string, status: OrderStatus): Promise<void> {
 
 <template>
   <main class="main">
-    <p v-if="error && !loaded" class="empty">加载失败</p>
-    <p v-else-if="loaded && days.length === 0" class="empty">还没有订单</p>
+    <p v-if="!loaded && !error" class="empty">Loading…</p>
+    <p v-else-if="error && !loaded" class="empty">Failed to load</p>
+    <p v-else-if="loaded && days.length === 0" class="empty">No orders yet</p>
     <p v-if="error && loaded" class="error">{{ error }}</p>
-    <section v-for="day in days" :key="day.date" class="day">
-      <h2>{{ day.label }} · 要做</h2>
+    <section v-for="day in activeDays" :key="day.date" class="day">
+      <h2>{{ day.label }} · To Bake</h2>
       <div class="card">
-        <div v-if="day.counts.length === 0" class="row muted-row">还没有已确认的订单</div>
+        <div v-if="day.counts.length === 0" class="row muted-row">No confirmed orders yet</div>
         <div v-for="count in day.counts" :key="count.cakeId" class="row">
           <span>{{ emojiFor(count.cakeId) }} {{ count.name }}</span>
           <b>{{ count.qty }}</b>
         </div>
+        <div v-if="day.pendingCount > 0" class="row pending-note">
+          <span>{{ day.pendingCount }} pending order(s) (not counted in To Bake)</span>
+        </div>
       </div>
       <article v-for="order in day.orders" :key="order.id" class="order">
         <div class="top">
-          <span>{{ order.customerName }} · {{ order.fulfillment }}</span>
-          <span :class="chipClass(order.status)">{{ order.status }}</span>
+          <span>{{ order.customerName }} · {{ fulfillmentLabel(order.fulfillment) }}</span>
+          <span :class="chipClass(order.status)">{{ statusLabel(order.status) }}</span>
         </div>
         <div class="sub">{{ summary(order) }}</div>
-        <div class="sub">{{ order.phone }}</div>
-        <div class="orderno">订单 #{{ order.orderNo }}</div>
-        <button v-if="order.receiptPath" class="receipt" type="button" @click="openReceipt(order)">收据</button>
+        <div class="sub">
+          <a class="phone-link" :href="phoneHref(order.phone)" target="_blank" rel="noopener noreferrer">{{ order.phone }}</a>
+        </div>
+        <div class="orderno">Order #{{ order.orderNo }} · RM {{ formatRm(order.total) }}</div>
+        <button v-if="order.receiptPath" class="receipt" type="button" @click="openReceipt(order)">View Receipt</button>
         <div v-if="order.status === '待确认' || order.status === '已确认'" class="acts">
           <template v-if="order.status === '待确认'">
-            <button type="button" :disabled="busyId === order.id" @click="setStatus(order.id, '已确认')">确认</button>
-            <button type="button" :disabled="busyId === order.id" @click="setStatus(order.id, '取消')">取消</button>
+            <button type="button" :disabled="busyId === order.id" @click="setStatus(order.id, '已确认')">Confirm</button>
+            <button type="button" :disabled="busyId === order.id" @click="setStatus(order.id, '取消')">Cancel</button>
           </template>
           <button
             v-else
@@ -133,10 +146,41 @@ async function setStatus(id: string, status: OrderStatus): Promise<void> {
             :disabled="busyId === order.id"
             @click="setStatus(order.id, '已完成')"
           >
-            已交货
+            Delivered
           </button>
         </div>
       </article>
     </section>
+
+    <div v-if="pastDays.length > 0" class="past-wrap">
+      <button class="btn ghost" type="button" @click="showPast = !showPast">
+        {{ showPast ? 'Hide Past Orders' : `View Past Completed (${pastDays.length}d)` }}
+      </button>
+      <section v-for="day in showPast ? pastDays : []" :key="day.date" class="day">
+        <h2>{{ day.label }} · Past</h2>
+        <article v-for="order in day.orders" :key="order.id" class="order">
+          <div class="top">
+            <span>{{ order.customerName }} · {{ fulfillmentLabel(order.fulfillment) }}</span>
+            <span :class="chipClass(order.status)">{{ statusLabel(order.status) }}</span>
+          </div>
+          <div class="sub">{{ summary(order) }}</div>
+          <div class="orderno">Order #{{ order.orderNo }} · RM {{ formatRm(order.total) }}</div>
+          <button v-if="order.receiptPath" class="receipt" type="button" @click="openReceipt(order)">View Receipt</button>
+        </article>
+      </section>
+    </div>
+
+    <div v-if="receiptModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Receipt details" @click.self="receiptModal = null">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">{{ receiptModal.order.customerName }} · #{{ receiptModal.order.orderNo }}</div>
+            <div class="modal-sub">Due RM {{ formatRm(receiptModal.order.total) }}</div>
+          </div>
+          <button class="text-btn" type="button" @click="receiptModal = null">Close</button>
+        </div>
+        <img class="modal-img" :src="receiptModal.url" alt="Payment receipt" />
+      </div>
+    </div>
   </main>
 </template>

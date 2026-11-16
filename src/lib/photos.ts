@@ -12,8 +12,8 @@ export function photoExtension(file: File): string | null {
 }
 
 export function photoProblem(file: File): string | null {
-  if (!photoExtension(file)) return '请选图片'
-  if (file.size > MAX_PHOTO_BYTES) return '照片太大'
+  if (!photoExtension(file)) return 'Please choose an image'
+  if (file.size > MAX_PHOTO_BYTES) return 'Image is too large (max 5MB)'
   return null
 }
 
@@ -27,8 +27,8 @@ const RECEIPT_EXTENSIONS: Record<string, string> = {
 
 /** Any image up to 5MB. Phones may send HEIC from the camera roll. */
 export function receiptProblem(file: File): string | null {
-  if (!file.type.startsWith('image/')) return '请选图片'
-  if (file.size > MAX_PHOTO_BYTES) return '照片太大'
+  if (!file.type.startsWith('image/')) return 'Please choose an image'
+  if (file.size > MAX_PHOTO_BYTES) return 'Image is too large (max 5MB)'
   return null
 }
 

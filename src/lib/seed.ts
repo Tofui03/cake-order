@@ -3,7 +3,7 @@ import { lineTotal } from './money'
 import type { Cake, Order, OrderItem, Settings } from './types'
 
 export const DEFAULT_SETTINGS: Settings = {
-  shopName: '妈妈的蛋糕',
+  shopName: "Mum's Cakes",
   whatsapp: '60123456789',
   duitnowQrUrl: null,
 }
@@ -23,11 +23,11 @@ export function placeholderColor(index: number): string {
 }
 
 export const SEED_CAKES: Cake[] = [
-  { id: CAKE_IDS.choc, name: '巧克力蛋糕 6寸', price: 68, photoUrl: null, emoji: '🍫', color: '#f0e0d4', active: true, sortOrder: 1 },
-  { id: CAKE_IDS.cheese, name: '芝士蛋糕 6寸', price: 75, photoUrl: null, emoji: '🧀', color: '#fbf0cf', active: true, sortOrder: 2 },
-  { id: CAKE_IDS.pandan, name: '班兰戚风', price: 45, photoUrl: null, emoji: '🌿', color: '#e2f1dc', active: true, sortOrder: 3 },
-  { id: CAKE_IDS.straw, name: '草莓鲜奶油 8寸', price: 98, photoUrl: null, emoji: '🍓', color: '#fbe1e4', active: true, sortOrder: 4 },
-  { id: CAKE_IDS.cup, name: '杯子蛋糕（6个）', price: 30, photoUrl: null, emoji: '🧁', color: '#ece3f6', active: true, sortOrder: 5 },
+  { id: CAKE_IDS.choc, name: 'Chocolate Cake 6"', price: 68, photoUrl: null, emoji: '🍫', color: '#f0e0d4', active: true, sortOrder: 1 },
+  { id: CAKE_IDS.cheese, name: 'Cheesecake 6"', price: 75, photoUrl: null, emoji: '🧀', color: '#fbf0cf', active: true, sortOrder: 2 },
+  { id: CAKE_IDS.pandan, name: 'Pandan Chiffon', price: 45, photoUrl: null, emoji: '🌿', color: '#e2f1dc', active: true, sortOrder: 3 },
+  { id: CAKE_IDS.straw, name: 'Strawberry Cream 8"', price: 98, photoUrl: null, emoji: '🍓', color: '#fbe1e4', active: true, sortOrder: 4 },
+  { id: CAKE_IDS.cup, name: 'Cupcakes (6 pcs)', price: 30, photoUrl: null, emoji: '🧁', color: '#ece3f6', active: true, sortOrder: 5 },
 ]
 
 function item(cakeId: string, qty: number): OrderItem {

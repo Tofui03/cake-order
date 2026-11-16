@@ -25,23 +25,23 @@ describe('buildWhatsAppMessage', () => {
 
     expect(message).toBe(
       [
-        '你好，我要订蛋糕：',
+        'Hi, I would like to order:',
         '巧克力蛋糕 6寸 x1',
         '杯子蛋糕（6个） x2',
-        '合计 RM 128',
+        'Total: RM 128',
         '',
-        '名字：Mei Ling',
-        '电话：012-3456789',
-        '日期：11月16日 周一',
-        '方式：自取',
-        '订单 #A1B2',
+        'Name: Mei Ling',
+        'Phone: 012-3456789',
+        'Date: Mon, 16 Nov',
+        'Method: Pickup',
+        'Order #A1B2',
       ].join('\n'),
     )
   })
 
   it('formats other weekdays and keeps a fractional total', () => {
-    expect(formatPickupDate('2026-11-15')).toBe('11月15日 周日')
-    expect(formatPickupDate('2026-01-01')).toBe('1月1日 周四')
+    expect(formatPickupDate('2026-11-15')).toBe('Sun, 15 Nov')
+    expect(formatPickupDate('2026-01-01')).toBe('Thu, 1 Jan')
     const message = buildWhatsAppMessage({
       items: [{ name: '班兰戚风', qty: 1 }],
       total: lineTotal([{ price: 10.5, qty: 1 }]),
@@ -51,12 +51,12 @@ describe('buildWhatsAppMessage', () => {
       fulfillment: '送货',
       orderNo: '#SY16',
     })
-    expect(message).toContain('合计 RM 10.50')
-    expect(message).toContain('日期：11月15日 周日')
-    expect(message).toContain('方式：送货')
-    expect(message).toContain('订单 #SY16')
-    expect(message).not.toContain('订单 ##')
-    expect(message).not.toContain('已付款，收据已上传')
+    expect(message).toContain('Total: RM 10.50')
+    expect(message).toContain('Date: Sun, 15 Nov')
+    expect(message).toContain('Method: Delivery')
+    expect(message).toContain('Order #SY16')
+    expect(message).not.toContain('Order ##')
+    expect(message).not.toContain('Paid, receipt uploaded')
   })
 
   it('adds a paid line after the receipt is stored', () => {
@@ -70,7 +70,7 @@ describe('buildWhatsAppMessage', () => {
       orderNo: 'A1B2',
       paid: true,
     })
-    expect(message.endsWith('订单 #A1B2\n已付款，收据已上传')).toBe(true)
+    expect(message.endsWith('Order #A1B2\nPaid, receipt uploaded')).toBe(true)
   })
 })
 

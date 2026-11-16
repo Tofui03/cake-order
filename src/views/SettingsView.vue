@@ -27,6 +27,8 @@ const { cakes, settings, load } = useCatalog()
 const shopName = ref('')
 const whatsapp = ref('')
 const problem = ref('')
+const shopNotice = ref('')
+const qrNotice = ref('')
 const savingShop = ref(false)
 const savingCake = ref(false)
 const draft = ref<Draft | null>(null)
@@ -128,6 +130,7 @@ async function saveShop(): Promise<void> {
   if (!canSaveShop.value || savingShop.value) return
   savingShop.value = true
   problem.value = ''
+  shopNotice.value = ''
   const next = {
     shopName: shopName.value.trim(),
     whatsapp: normalizeWhatsApp(whatsapp.value),
@@ -138,10 +141,11 @@ async function saveShop(): Promise<void> {
     settings.value = next
     shopName.value = next.shopName
     whatsapp.value = next.whatsapp
+    shopNotice.value = 'Saved'
     if (typeof document !== 'undefined') document.title = next.shopName
   } catch (error) {
     console.error(error)
-    problem.value = '没有保存'
+    problem.value = 'Failed to save'
   } finally {
     savingShop.value = false
   }
@@ -156,7 +160,7 @@ async function toggle(cake: Cake): Promise<void> {
     if (draft.value?.id === cake.id) draft.value.active = next.active
   } catch (error) {
     console.error(error)
-    problem.value = '没有保存'
+    problem.value = 'Failed to save'
   }
 }
 
@@ -204,7 +208,7 @@ async function remove(cake: Cake): Promise<void> {
     await load(true)
   } catch (error) {
     console.error(error)
-    problem.value = '没有保存'
+    problem.value = 'Failed to save'
   }
 }
 
@@ -219,11 +223,13 @@ async function onQr(event: Event): Promise<void> {
     return
   }
   problem.value = ''
+  qrNotice.value = ''
   try {
     const url = await getApi().uploadDuitNowQr(file)
     const next = { ...settings.value, duitnowQrUrl: url }
     await getApi().saveSettings(next)
     settings.value = next
+    qrNotice.value = '已上传'
   } catch (error) {
     console.error(error)
     problem.value = error instanceof Error && (error.message === '照片太大' || error.message === '请选图片')
@@ -232,12 +238,27 @@ async function onQr(event: Event): Promise<void> {
   }
 }
 
+async function removeQr(): Promise<void> {
+  if (!window.confirm('移除收款码？移除后客人下单不需上传收据。')) return
+  problem.value = ''
+  qrNotice.value = ''
+  try {
+    const next = { ...settings.value, duitnowQrUrl: null }
+    await getApi().saveSettings(next)
+    settings.value = next
+    qrNotice.value = '已移除'
+  } catch (error) {
+    console.error(error)
+    problem.value = 'Failed to save'
+  }
+}
+
 async function logout(): Promise<void> {
   try {
     await getApi().signOut()
   } catch (error) {
     console.error(error)
-    problem.value = '没有保存'
+    problem.value = 'Failed to save'
   }
 }
 </script>
@@ -245,21 +266,26 @@ async function logout(): Promise<void> {
 <template>
   <main class="main">
     <div class="fields">
-      <label for="shop-name">店名</label>
+      <label for="shop-name">Shop Name</label>
       <input id="shop-name" v-model="shopName" maxlength="40" autocomplete="organization" />
-      <label for="shop-whatsapp">WhatsApp</label>
+      <label for="shop-whatsapp">WhatsApp (e.g. 60123456789, no +)</label>
       <input id="shop-whatsapp" v-model="whatsapp" maxlength="20" inputmode="tel" autocomplete="tel" />
     </div>
-    <button class="btn shop-save" type="button" :disabled="!canSaveShop || savingShop" @click="saveShop">保存</button>
+    <p v-if="shopNotice" class="ok-note">{{ shopNotice }}</p>
+    <button class="btn shop-save" type="button" :disabled="!canSaveShop || savingShop" @click="saveShop">Save</button>
 
     <h2 class="section">DuitNow QR</h2>
-    <img v-if="settings.duitnowQrUrl" class="qr" :src="settings.duitnowQrUrl" alt="" />
-    <label class="file">
-      {{ settings.duitnowQrUrl ? '更换' : '上传' }}
-      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" @change="onQr" />
-    </label>
+    <img v-if="settings.duitnowQrUrl" class="qr" :src="settings.duitnowQrUrl" alt="DuitNow QR" />
+    <div class="qr-actions">
+      <label class="file">
+        {{ settings.duitnowQrUrl ? 'Replace' : 'Upload' }}
+        <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" @change="onQr" />
+      </label>
+      <button v-if="settings.duitnowQrUrl" class="text-btn" type="button" @click="removeQr">Remove QR</button>
+    </div>
+    <p v-if="qrNotice" class="ok-note">{{ qrNotice }}</p>
 
-    <h2 class="section">蛋糕</h2>
+    <h2 class="section">Cakes</h2>
     <p v-if="problem" class="error">{{ problem }}</p>
 
     <div v-for="cake in cakes" :key="cake.id" class="cake-edit">
@@ -275,54 +301,54 @@ async function logout(): Promise<void> {
           type="button"
           role="switch"
           :aria-checked="cake.active"
-          :aria-label="cake.active ? '在售' : '已下架'"
+          :aria-label="cake.active ? 'Active' : 'Hidden'"
           @click="toggle(cake)"
         >
           <i></i>
         </button>
       </div>
-      <button v-if="draft?.id !== cake.id" class="text-btn" type="button" @click="edit(cake)">编辑</button>
+      <button v-if="draft?.id !== cake.id" class="text-btn" type="button" @click="edit(cake)">Edit</button>
       <form v-else class="editor" @submit.prevent="saveCake">
         <div class="fields">
-          <label :for="`cake-name-${cake.id}`">名字</label>
+          <label :for="`cake-name-${cake.id}`">Name</label>
           <input :id="`cake-name-${cake.id}`" v-model="draft.name" maxlength="40" />
-          <label :for="`cake-price-${cake.id}`">价格</label>
+          <label :for="`cake-price-${cake.id}`">Price</label>
           <input :id="`cake-price-${cake.id}`" v-model="draft.price" inputmode="decimal" />
-          <label>照片</label>
+          <label>Photo</label>
           <div class="photo-row">
             <CakePic :emoji="draft.emoji" :color="draft.color" :photo-url="draft.preview || draft.photoUrl" />
             <label class="file">
-              照片
+              Photo
               <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" @change="onFile" />
             </label>
           </div>
         </div>
-        <button class="btn" type="submit" :disabled="!canSaveCake || savingCake">保存</button>
-        <button class="btn ghost" type="button" @click="remove(cake)">删除</button>
-        <button class="text-btn" type="button" @click="closeDraft">关闭</button>
+        <button class="btn" type="submit" :disabled="!canSaveCake || savingCake">Save</button>
+        <button class="btn ghost" type="button" @click="remove(cake)">Delete</button>
+        <button class="text-btn" type="button" @click="closeDraft">Close</button>
       </form>
     </div>
 
     <form v-if="draft?.isNew" class="editor new-cake" @submit.prevent="saveCake">
       <div class="fields">
-        <label for="new-cake-name">名字</label>
+        <label for="new-cake-name">Name</label>
         <input id="new-cake-name" v-model="draft.name" maxlength="40" />
-        <label for="new-cake-price">价格</label>
+        <label for="new-cake-price">Price</label>
         <input id="new-cake-price" v-model="draft.price" inputmode="decimal" />
-        <label>照片</label>
+        <label>Photo</label>
         <div class="photo-row">
           <CakePic :emoji="draft.emoji" :color="draft.color" :photo-url="draft.preview || draft.photoUrl" />
           <label class="file">
-            照片
+            Photo
             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" @change="onFile" />
           </label>
         </div>
       </div>
-      <button class="btn" type="submit" :disabled="!canSaveCake || savingCake">保存</button>
-      <button class="text-btn" type="button" @click="closeDraft">关闭</button>
+      <button class="btn" type="submit" :disabled="!canSaveCake || savingCake">Save</button>
+      <button class="text-btn" type="button" @click="closeDraft">Close</button>
     </form>
 
-    <button v-else class="btn ghost add" type="button" @click="addCake">添加蛋糕</button>
-    <button class="btn ghost logout" type="button" @click="logout">退出</button>
+    <button v-else class="btn ghost add" type="button" @click="addCake">Add Cake</button>
+    <button class="btn ghost logout" type="button" @click="logout">Sign Out</button>
   </main>
 </template>

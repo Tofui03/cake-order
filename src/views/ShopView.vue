@@ -2,8 +2,8 @@
 import { computed, onUnmounted, reactive, ref } from 'vue'
 import CakePic from '../components/CakePic.vue'
 import { getApi } from '../lib/api'
-import { canPlaceOrder } from '../lib/canSubmit'
-import { tomorrowIso } from '../lib/dates'
+import { canPlaceOrder, missingOrderFields } from '../lib/canSubmit'
+import { quickPickupOptions, tomorrowIso } from '../lib/dates'
 import { formatRm, lineTotal } from '../lib/money'
 import { makeOrderNo } from '../lib/orderNo'
 import { receiptProblem } from '../lib/photos'
@@ -22,31 +22,48 @@ const submitting = ref(false)
 const submitError = ref('')
 const receiptFile = ref<File | null>(null)
 const receiptPreview = ref<string | null>(null)
+const submittedOrder = ref<{ orderNo: string; total: number; waUrl: string } | null>(null)
 
 const needsReceipt = computed(() => Boolean(settings.value.duitnowQrUrl?.trim()))
+const dateOptions = computed(() => quickPickupOptions())
+const selectedItems = computed(() =>
+  cakes.value
+    .filter((cake) => (qty[cake.id] ?? 0) > 0)
+    .map((cake) => ({
+      id: cake.id,
+      name: cake.name,
+      qty: qty[cake.id] ?? 0,
+      subtotal: cake.price * (qty[cake.id] ?? 0),
+    })),
+)
 
 const total = computed(() =>
   lineTotal(cakes.value.map((cake) => ({ price: cake.price, qty: qty[cake.id] ?? 0 }))),
 )
 
 const buttonLabel = computed(() =>
-  total.value > 0 ? `用 WhatsApp 下单 · RM ${formatRm(total.value)}` : '用 WhatsApp 下单',
+  total.value > 0 ? `Order via WhatsApp · RM ${formatRm(total.value)}` : 'Order via WhatsApp',
 )
 
-const canSubmit = computed(() =>
-  canPlaceOrder({
-    ready: ready.value,
-    submitting: submitting.value,
-    total: total.value,
-    name: name.value,
-    phone: phone.value,
-    pickupDate: date.value,
-    fulfillment: way.value,
-    whatsapp: settings.value.whatsapp,
-    paymentRequired: needsReceipt.value,
-    hasReceipt: receiptFile.value !== null,
-  }),
-)
+const orderInput = computed(() => ({
+  ready: ready.value,
+  submitting: submitting.value,
+  total: total.value,
+  name: name.value,
+  phone: phone.value,
+  pickupDate: date.value,
+  fulfillment: way.value,
+  whatsapp: settings.value.whatsapp,
+  paymentRequired: needsReceipt.value,
+  hasReceipt: receiptFile.value !== null,
+}))
+
+const canSubmit = computed(() => canPlaceOrder(orderInput.value))
+const missingHint = computed(() => {
+  if (!ready.value || submitting.value || total.value <= 0) return ''
+  const missing = missingOrderFields(orderInput.value)
+  return missing.length > 0 ? `Missing: ${missing.join(', ')}` : ''
+})
 
 function changeQty(id: string, delta: number): void {
   const next = Math.max(0, (qty[id] ?? 0) + delta)
@@ -144,12 +161,14 @@ async function submit(): Promise<void> {
       orderNo,
       paid: Boolean(receiptPath),
     })
-    openWhatsApp(whatsAppUrl(settings.value.whatsapp, message), popup)
+    const url = whatsAppUrl(settings.value.whatsapp, message)
+    submittedOrder.value = { orderNo, total: orderTotal, waUrl: url }
+    openWhatsApp(url, popup)
     reset()
   } catch (error) {
     console.error(error)
     popup?.close()
-    submitError.value = '下单失败，请重试'
+    submitError.value = 'Failed to place order. Please try again.'
   } finally {
     submitting.value = false
   }
@@ -159,10 +178,19 @@ async function submit(): Promise<void> {
 <template>
   <div class="shop-screen">
     <main class="main shop">
-      <p v-if="catalogError && !ready" class="empty">加载失败</p>
-      <button v-if="catalogError && !ready" class="btn retry" type="button" @click="load(false)">重试</button>
+      <p v-if="!ready && !catalogError" class="empty">Loading…</p>
+      <p v-else-if="catalogError && !ready" class="empty">Failed to load</p>
+      <button v-if="catalogError && !ready" class="btn retry" type="button" @click="load(false)">Retry</button>
+      <div v-else-if="submittedOrder" class="card confirm-card">
+        <p class="confirm-title">Order #{{ submittedOrder.orderNo }} recorded</p>
+        <p class="confirm-sub">Total RM {{ formatRm(submittedOrder.total) }}. If WhatsApp didn't open automatically, tap below to send.</p>
+        <a class="btn wa confirm-wa" :href="submittedOrder.waUrl" target="_blank" rel="noopener noreferrer">
+          Open WhatsApp to Send
+        </a>
+        <button class="btn ghost" type="button" @click="submittedOrder = null">Place Another Order</button>
+      </div>
       <template v-else-if="ready">
-        <p v-if="cakes.length === 0" class="empty">还没有蛋糕</p>
+        <p v-if="cakes.length === 0" class="empty">No cakes available yet</p>
         <div v-for="cake in cakes" :key="cake.id" class="item">
           <CakePic :emoji="cake.emoji" :color="cake.color" :photo-url="cake.photoUrl" />
           <div class="info">
@@ -173,22 +201,22 @@ async function submit(): Promise<void> {
             <button
               v-if="qty[cake.id]"
               type="button"
-              :aria-label="`减少 ${cake.name}`"
+              :aria-label="`Decrease ${cake.name}`"
               @click="changeQty(cake.id, -1)"
             >
               −
             </button>
             <span v-if="qty[cake.id]">{{ qty[cake.id] }}</span>
-            <button class="add" type="button" :aria-label="`增加 ${cake.name}`" @click="changeQty(cake.id, 1)">
+            <button class="add" type="button" :aria-label="`Increase ${cake.name}`" @click="changeQty(cake.id, 1)">
               +
             </button>
           </div>
         </div>
 
         <div class="fields">
-          <label for="customer-name">名字</label>
+          <label for="customer-name">Name</label>
           <input id="customer-name" v-model="name" maxlength="40" autocomplete="name" @input="submitError = ''" />
-          <label for="customer-phone">电话</label>
+          <label for="customer-phone">Phone</label>
           <input
             id="customer-phone"
             v-model="phone"
@@ -198,7 +226,18 @@ async function submit(): Promise<void> {
             autocomplete="tel"
             @input="submitError = ''"
           />
-          <label for="pickup-date">取货日期</label>
+          <label for="pickup-date">Pickup Date</label>
+          <div class="date-chips">
+            <button
+              v-for="opt in dateOptions"
+              :key="opt.iso"
+              type="button"
+              :class="{ on: date === opt.iso }"
+              @click="date = opt.iso; submitError = ''"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
           <input
             id="pickup-date"
             v-model="date"
@@ -206,25 +245,33 @@ async function submit(): Promise<void> {
             :min="tomorrowIso()"
             @change="submitError = ''"
           />
-          <label>方式</label>
+          <label>Method</label>
           <div class="pick">
-            <button type="button" :class="{ on: way === '自取' }" @click="way = '自取'">自取</button>
-            <button type="button" :class="{ on: way === '送货' }" @click="way = '送货'">送货</button>
+            <button type="button" :class="{ on: way === '自取' }" @click="way = '自取'">Pickup</button>
+            <button type="button" :class="{ on: way === '送货' }" @click="way = '送货'">Delivery</button>
           </div>
         </div>
-        <div v-if="needsReceipt" class="pay">
-          <img class="qr" :src="settings.duitnowQrUrl ?? ''" alt="" />
-          <p class="pay-line">请先转账 RM {{ formatRm(total) }}</p>
+        <div v-if="needsReceipt && total > 0" class="pay">
+          <div class="card recap">
+            <div v-for="item in selectedItems" :key="item.id" class="row">
+              <span>{{ item.name }} ×{{ item.qty }}</span>
+              <span>RM {{ formatRm(item.subtotal) }}</span>
+            </div>
+          </div>
+          <img class="qr" :src="settings.duitnowQrUrl ?? ''" alt="DuitNow QR" />
+          <a class="btn ghost qr-save" :href="settings.duitnowQrUrl ?? ''" download="duitnow-qr.png">Save QR Code</a>
+          <p class="pay-line">Please transfer RM {{ formatRm(total) }} first</p>
           <label class="file">
-            收据
+            {{ receiptPreview ? 'Change Receipt' : 'Upload Receipt' }}
             <input type="file" accept="image/*" @change="onReceipt" />
           </label>
-          <img v-if="receiptPreview" class="thumb" :src="receiptPreview" alt="" />
+          <img v-if="receiptPreview" class="thumb" :src="receiptPreview" alt="Selected receipt preview" />
         </div>
       </template>
     </main>
-    <div class="bar">
+    <div v-if="ready && !submittedOrder" class="bar">
       <p v-if="submitError" class="error">{{ submitError }}</p>
+      <p v-else-if="missingHint" class="hint">{{ missingHint }}</p>
       <button class="btn wa" type="button" :disabled="!canSubmit" @click="submit">{{ buttonLabel }}</button>
     </div>
   </div>

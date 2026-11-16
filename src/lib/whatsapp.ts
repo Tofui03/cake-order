@@ -25,18 +25,19 @@ export function buildWhatsAppMessage(input: WhatsAppMessageInput): string {
     .map((item) => `${item.name} x${item.qty}`)
     .join('\n')
   const orderNo = input.orderNo.replace(/^#/, '')
+  const fulfillmentLabel = input.fulfillment === '送货' ? 'Delivery' : 'Pickup'
   const message = [
-    '你好，我要订蛋糕：',
+    'Hi, I would like to order:',
     lines,
-    `合计 RM ${formatRm(input.total)}`,
+    `Total: RM ${formatRm(input.total)}`,
     '',
-    `名字：${input.customerName}`,
-    `电话：${input.phone}`,
-    `日期：${formatPickupDate(input.pickupDate)}`,
-    `方式：${input.fulfillment}`,
-    `订单 #${orderNo}`,
+    `Name: ${input.customerName}`,
+    `Phone: ${input.phone}`,
+    `Date: ${formatPickupDate(input.pickupDate)}`,
+    `Method: ${fulfillmentLabel}`,
+    `Order #${orderNo}`,
   ]
-  if (input.paid) message.push('已付款，收据已上传')
+  if (input.paid) message.push('Paid, receipt uploaded')
   return message.join('\n')
 }
 

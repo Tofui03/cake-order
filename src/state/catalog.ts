@@ -25,7 +25,7 @@ export function useCatalog() {
       if (typeof document !== 'undefined') document.title = nextSettings.shopName
     } catch (error) {
       console.error(error)
-      if (!ready.value) catalogError.value = '加载失败'
+      if (!ready.value) catalogError.value = 'Failed to load'
     }
   }
 
